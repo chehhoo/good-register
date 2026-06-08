@@ -10,6 +10,18 @@ export async function fetchEventInfo(): Promise<EventInfo> {
   return res.data
 }
 
+export interface ChurchOption {
+  id: number
+  nameEng: string
+  nameChn: string
+  acronym: string
+}
+
+export async function fetchChurches(): Promise<ChurchOption[]> {
+  const res = await client.get('/register/churches')
+  return res.data
+}
+
 export async function submitRegistration(form: FormData) {
   const payload = {
     contactFirstName:   form.contactFirstName.trim(),

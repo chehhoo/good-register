@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { PlusCircle, Trash2, ChevronRight, ChevronLeft, CheckCircle } from 'lucide-react'
-import { fetchEventInfo, submitRegistration } from '../api'
+import { fetchEventInfo, fetchChurches, submitRegistration } from '../api'
+import type { ChurchOption } from '../api'
 import CustomField from '../components/CustomField'
 import StepIndicator from '../components/StepIndicator'
 import type { AgeCategory, CustomFieldDef, EventInfo, FormData, Gender, Member } from '../types'
@@ -23,10 +24,15 @@ const GENDERS: { value: Gender; eng: string; chn: string }[] = [
 
 const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
 
-const newMember = (lastName = ''): Member => ({
+const newMember = (opts: Partial<Member> & { lastName?: string } = {}): Member => ({
   id: crypto.randomUUID(),
-  firstName: '', lastName, chineseName: '',
-  gender: '', ageCategory: 'ADULT', shirtSize: '', dietaryNotes: '',
+  firstName: opts.firstName ?? '',
+  lastName: opts.lastName ?? '',
+  chineseName: opts.chineseName ?? '',
+  gender: opts.gender ?? '',
+  ageCategory: opts.ageCategory ?? 'ADULT',
+  shirtSize: opts.shirtSize ?? '',
+  dietaryNotes: opts.dietaryNotes ?? '',
 })
 
 const emptyForm = (): FormData => ({
@@ -54,6 +60,13 @@ function Field({ label, chn, required, children }: {
 
 const inp = "w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
 
+function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 10)
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Register() {
@@ -67,10 +80,28 @@ export default function Register() {
     familyName: string; memberNames: string[]; eventName: string
   } | null>(null)
 
+  // Church combobox state
+  const [churches, setChurches] = useState<ChurchOption[]>([])
+  const [churchSearch, setChurchSearch] = useState('')
+  const [churchOpen, setChurchOpen] = useState(false)
+  const churchRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     fetchEventInfo()
       .then(info => setEventInfo(info))
       .catch(() => setEventError('No active event found. Please contact the administrator.'))
+    fetchChurches().then(setChurches).catch(() => {/* silently ignore */})
+  }, [])
+
+  // Close church dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (churchRef.current && !churchRef.current.contains(e.target as Node)) {
+        setChurchOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
   }, [])
 
   const cfg = eventInfo?.registrationConfig ?? {
@@ -100,7 +131,11 @@ export default function Register() {
     setForm(f => ({ ...f, members: f.members.map(m => m.id === id ? { ...m, [field]: value } : m) }))
 
   const addMember = () =>
-    setForm(f => ({ ...f, members: [...f.members, newMember(f.contactLastName)] }))
+    setForm(f => ({ ...f, members: [...f.members, newMember({
+      firstName:    f.contactFirstName,
+      lastName:     f.contactLastName,
+      chineseName:  f.contactChineseName,
+    })] }))
 
   const removeMember = (id: string) =>
     setForm(f => ({ ...f, members: f.members.filter(m => m.id !== id) }))
@@ -108,7 +143,7 @@ export default function Register() {
   const setCustomField = (id: string, value: string) =>
     setForm(f => ({ ...f, customFieldValues: { ...f.customFieldValues, [id]: value } }))
 
-  const step1Valid = !!form.contactFirstName.trim() && !!form.contactLastName.trim()
+  const step1Valid = !!form.contactFirstName.trim() && !!form.contactLastName.trim() && !!form.church.trim()
   const step2Valid = form.members.length > 0 &&
     form.members.every(m => m.firstName.trim() && m.lastName.trim() && m.ageCategory && m.gender)
 
@@ -178,10 +213,10 @@ export default function Register() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-start justify-center p-4 pt-8">
-      <div className="bg-white rounded-2xl shadow-lg max-w-xl w-full overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-lg max-w-xl w-full">
 
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5 text-white">
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5 text-white rounded-t-2xl">
           <p className="text-blue-200 text-sm font-medium mb-1">{eventInfo?.name ?? '…'}</p>
           <h1 className="text-xl font-bold">活動報名 Event Registration</h1>
         </div>
@@ -221,7 +256,8 @@ export default function Register() {
                 </Field>
                 <Field label="Phone" chn="電話">
                   <input type="tel" className={inp} value={form.phone}
-                    onChange={e => setContact('phone', e.target.value)} placeholder="(xxx) xxx-xxxx" />
+                    onChange={e => setContact('phone', formatPhone(e.target.value))}
+                    placeholder="(xxx) xxx-xxxx" />
                 </Field>
               </div>
 
@@ -249,9 +285,63 @@ export default function Register() {
               </div>
 
               {cfg?.showChurch && (
-                <Field label="Church" chn="教會">
-                  <input className={inp} value={form.church}
-                    onChange={e => setContact('church', e.target.value)} placeholder="e.g. CNSCCC" />
+                <Field label="Church" chn="教會" required>
+                  <div className="relative" ref={churchRef}>
+                    <input
+                      className={inp}
+                      value={churchOpen ? churchSearch : form.church}
+                      placeholder="Search or type church name 搜尋或輸入教會名稱"
+                      onFocus={() => { setChurchSearch(''); setChurchOpen(true) }}
+                      onChange={e => { setChurchSearch(e.target.value); setChurchOpen(true) }}
+                    />
+                    {churchOpen && (
+                      <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-72 overflow-y-auto">
+                        {/* Allow free-text entry */}
+                        {churchSearch.trim() && (
+                          <button
+                            type="button"
+                            onMouseDown={() => { setContact('church', churchSearch.trim()); setChurchOpen(false) }}
+                            className="w-full text-left px-3 py-2.5 text-sm text-blue-600 hover:bg-blue-50 border-b border-gray-100">
+                            ＋ Use "{churchSearch.trim()}"
+                          </button>
+                        )}
+                        {churches
+                          .filter(c => {
+                            const q = churchSearch.toLowerCase()
+                            return !q ||
+                              c.nameEng.toLowerCase().includes(q) ||
+                              c.nameChn.includes(q) ||
+                              c.acronym.toLowerCase().includes(q)
+                          })
+                          .map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onMouseDown={() => {
+                                const label = c.acronym || c.nameEng || c.nameChn
+                                setContact('church', label)
+                                setChurchOpen(false)
+                              }}
+                              className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-2">
+                              {c.acronym && (
+                                <span className="font-semibold text-blue-700 w-16 shrink-0">{c.acronym}</span>
+                              )}
+                              <span className="flex-1 text-gray-800">{c.nameEng || c.nameChn}</span>
+                              {c.nameChn && c.nameEng && (
+                                <span className="text-gray-400 text-xs shrink-0">{c.nameChn}</span>
+                              )}
+                            </button>
+                          ))
+                        }
+                        {churches.filter(c => {
+                          const q = churchSearch.toLowerCase()
+                          return !q || c.nameEng.toLowerCase().includes(q) || c.nameChn.includes(q) || c.acronym.toLowerCase().includes(q)
+                        }).length === 0 && !churchSearch.trim() && (
+                          <p className="px-3 py-2.5 text-sm text-gray-400">No churches found</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </Field>
               )}
 
@@ -462,7 +552,24 @@ export default function Register() {
               : <div />}
 
             {step < 3
-              ? <button onClick={() => setStep(s => s + 1)}
+              ? <button onClick={() => {
+                  if (step === 1) {
+                    // Pre-populate member 1 with the contact person if still blank
+                    setForm(f => {
+                      const m0 = f.members[0]
+                      const shouldPrefill = !m0.firstName.trim() && !m0.lastName.trim()
+                      if (!shouldPrefill) return { ...f, step: 2 } as any
+                      return {
+                        ...f,
+                        members: [
+                          { ...m0, firstName: f.contactFirstName, lastName: f.contactLastName, chineseName: f.contactChineseName },
+                          ...f.members.slice(1),
+                        ],
+                      }
+                    })
+                  }
+                  setStep(s => s + 1)
+                }}
                   disabled={step === 1 ? !step1Valid : !step2Valid}
                   className="flex items-center gap-1 px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                   下一步 Next <ChevronRight size={16} />
