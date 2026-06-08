@@ -1,4 +1,5 @@
 export type AgeCategory = 'ADULT' | 'YOUTH' | 'K5' | 'PREK' | 'BABY'
+export type Gender = 'M' | 'F' | 'O'
 
 export interface CustomFieldDef {
   id: string
@@ -35,6 +36,7 @@ export interface Member {
   firstName: string
   lastName: string
   chineseName: string
+  gender: Gender | ''
   ageCategory: AgeCategory
   shirtSize: string
   dietaryNotes: string
