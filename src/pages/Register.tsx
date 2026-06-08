@@ -1,18 +1,24 @@
 import { useState, useEffect } from 'react'
-import { PlusCircle, Trash2, ChevronRight, ChevronLeft, CheckCircle, ExternalLink } from 'lucide-react'
+import { PlusCircle, Trash2, ChevronRight, ChevronLeft, CheckCircle } from 'lucide-react'
 import { fetchEventInfo, submitRegistration } from '../api'
 import CustomField from '../components/CustomField'
 import StepIndicator from '../components/StepIndicator'
-import type { AgeCategory, CustomFieldDef, EventInfo, FormData, Member } from '../types'
+import type { AgeCategory, CustomFieldDef, EventInfo, FormData, Gender, Member } from '../types'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const AGE_CATEGORIES: { value: AgeCategory; eng: string; chn: string; color: string }[] = [
-  { value: 'ADULT', eng: 'Adult',  chn: '成人',   color: 'bg-blue-100 text-blue-800 border-blue-300' },
-  { value: 'YOUTH', eng: 'Youth',  chn: '青少年',  color: 'bg-green-100 text-green-800 border-green-300' },
-  { value: 'K5',    eng: 'K – 5',  chn: '幼小',   color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
-  { value: 'PREK',  eng: 'Pre-K',  chn: '幼兒',   color: 'bg-orange-100 text-orange-800 border-orange-300' },
-  { value: 'BABY',  eng: '0 – 2',  chn: '嬰兒',   color: 'bg-pink-100 text-pink-800 border-pink-300' },
+  { value: 'ADULT', eng: 'Adult',  chn: '成人',  color: 'bg-blue-100 text-blue-800 border-blue-300' },
+  { value: 'YOUTH', eng: 'Youth',  chn: '青少年', color: 'bg-green-100 text-green-800 border-green-300' },
+  { value: 'K5',    eng: 'K – 5',  chn: '幼小',  color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+  { value: 'PREK',  eng: 'Pre-K',  chn: '幼兒',  color: 'bg-orange-100 text-orange-800 border-orange-300' },
+  { value: 'BABY',  eng: '0 – 2',  chn: '嬰兒',  color: 'bg-pink-100 text-pink-800 border-pink-300' },
+]
+
+const GENDERS: { value: Gender; eng: string; chn: string }[] = [
+  { value: 'M', eng: 'Male',   chn: '男' },
+  { value: 'F', eng: 'Female', chn: '女' },
+  { value: 'O', eng: 'Other',  chn: '其他' },
 ]
 
 const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
@@ -20,7 +26,7 @@ const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
 const newMember = (lastName = ''): Member => ({
   id: crypto.randomUUID(),
   firstName: '', lastName, chineseName: '',
-  ageCategory: 'ADULT', shirtSize: '', dietaryNotes: '',
+  gender: '', ageCategory: 'ADULT', shirtSize: '', dietaryNotes: '',
 })
 
 const emptyForm = (): FormData => ({
@@ -29,13 +35,17 @@ const emptyForm = (): FormData => ({
   church: '', members: [newMember()], customFieldValues: {},
 })
 
-// ── Input helper ──────────────────────────────────────────────────────────────
+// ── Input helpers ─────────────────────────────────────────────────────────────
 
-function Field({ label, chn, children }: { label: string; chn?: string; children: React.ReactNode }) {
+function Field({ label, chn, required, children }: {
+  label: string; chn?: string; required?: boolean; children: React.ReactNode
+}) {
   return (
     <div>
       <label className="block text-xs font-medium text-gray-600 mb-1">
-        {label}{chn && <span className="ml-1 text-gray-400">{chn}</span>}
+        {label}
+        {chn && <span className="ml-1 text-gray-400">{chn}</span>}
+        {required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       {children}
     </div>
@@ -53,20 +63,29 @@ export default function Register() {
   const [form, setForm] = useState<FormData>(emptyForm())
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const [result, setResult] = useState<{ familyName: string; memberNames: string[]; eventName: string } | null>(null)
+  const [result, setResult] = useState<{
+    familyName: string; memberNames: string[]; eventName: string
+  } | null>(null)
 
   useEffect(() => {
     fetchEventInfo()
-      .then(info => {
-        setEventInfo(info)
-        // Pre-fill church if event has a default (could extend API later)
-      })
+      .then(info => setEventInfo(info))
       .catch(() => setEventError('No active event found. Please contact the administrator.'))
   }, [])
 
-  const cfg = eventInfo?.registrationConfig
+  const cfg = eventInfo?.registrationConfig ?? {
+    showAgeCategory: true,
+    showMeals: false,
+    mealDays: 3,
+    showLodging: false,
+    showWorkshops: false,
+    showShirtSize: false,
+    showDietary: false,
+    requireEmergencyContact: false,
+    showChurch: true,
+    customFields: null,
+  }
 
-  // Parse custom fields JSON from backend
   const customFieldDefs: CustomFieldDef[] = (() => {
     if (!cfg?.customFields) return []
     try { return JSON.parse(cfg.customFields) } catch { return [] }
@@ -89,9 +108,9 @@ export default function Register() {
   const setCustomField = (id: string, value: string) =>
     setForm(f => ({ ...f, customFieldValues: { ...f.customFieldValues, [id]: value } }))
 
-  const step1Valid = form.contactFirstName.trim() && form.contactLastName.trim()
+  const step1Valid = !!form.contactFirstName.trim() && !!form.contactLastName.trim()
   const step2Valid = form.members.length > 0 &&
-    form.members.every(m => m.firstName.trim() && m.lastName.trim() && m.ageCategory)
+    form.members.every(m => m.firstName.trim() && m.lastName.trim() && m.ageCategory && m.gender)
 
   const handleSubmit = async () => {
     setSubmitting(true)
@@ -99,8 +118,9 @@ export default function Register() {
     try {
       const res = await submitRegistration(form)
       setResult({ familyName: res.familyName, memberNames: res.memberNames, eventName: res.eventName })
-    } catch (e: any) {
-      setSubmitError(e.response?.data?.error ?? 'Submission failed. Please try again.')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } }
+      setSubmitError(err.response?.data?.error ?? 'Submission failed. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -115,6 +135,7 @@ export default function Register() {
           <CheckCircle className="mx-auto text-green-500 mb-4" size={56} />
           <h1 className="text-2xl font-bold text-gray-800 mb-1">報名成功！Registration Complete!</h1>
           <p className="text-gray-500 mb-6">{result.eventName}</p>
+
           <div className="bg-gray-50 rounded-xl p-4 text-left mb-6">
             <p className="text-sm font-semibold text-gray-600 mb-2">
               {result.familyName} — {result.memberNames.length} member{result.memberNames.length !== 1 ? 's' : ''}
@@ -128,13 +149,14 @@ export default function Register() {
               ))}
             </ul>
           </div>
-          <p className="text-sm text-gray-500 mb-4">
-            Your registration has been received. Staff will follow up with further details.
+
+          <p className="text-sm text-gray-500">
+            Your registration has been received and is pending confirmation.
+            Staff will follow up with further details.
           </p>
-          <a href="https://goodvessel.net/retreat/" target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium">
-            <ExternalLink size={14} /> Admin portal: goodvessel.net/retreat/
-          </a>
+          <p className="text-sm text-gray-400 mt-1">
+            您的報名已收到，工作人員將與您跟進確認。
+          </p>
         </div>
       </div>
     )
@@ -177,38 +199,62 @@ export default function Register() {
               </p>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label="First Name *" chn="名字"><input className={inp} value={form.contactFirstName} onChange={e => setContact('contactFirstName', e.target.value)} placeholder="First" /></Field>
-                <Field label="Last Name *" chn="姓氏"><input className={inp} value={form.contactLastName} onChange={e => setContact('contactLastName', e.target.value)} placeholder="Last" /></Field>
+                <Field label="First Name" chn="名字" required>
+                  <input className={inp} value={form.contactFirstName}
+                    onChange={e => setContact('contactFirstName', e.target.value)} placeholder="First" />
+                </Field>
+                <Field label="Last Name" chn="姓氏" required>
+                  <input className={inp} value={form.contactLastName}
+                    onChange={e => setContact('contactLastName', e.target.value)} placeholder="Last" />
+                </Field>
               </div>
 
               <Field label="Chinese Name" chn="中文名">
-                <input className={inp} value={form.contactChineseName} onChange={e => setContact('contactChineseName', e.target.value)} placeholder="中文姓名（選填）" />
+                <input className={inp} value={form.contactChineseName}
+                  onChange={e => setContact('contactChineseName', e.target.value)} placeholder="中文姓名（選填）" />
               </Field>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Email" chn="電郵"><input type="email" className={inp} value={form.email} onChange={e => setContact('email', e.target.value)} placeholder="email@example.com" /></Field>
-                <Field label="Phone" chn="電話"><input type="tel" className={inp} value={form.phone} onChange={e => setContact('phone', e.target.value)} placeholder="(xxx) xxx-xxxx" /></Field>
+                <Field label="Email" chn="電郵">
+                  <input type="email" className={inp} value={form.email}
+                    onChange={e => setContact('email', e.target.value)} placeholder="email@example.com" />
+                </Field>
+                <Field label="Phone" chn="電話">
+                  <input type="tel" className={inp} value={form.phone}
+                    onChange={e => setContact('phone', e.target.value)} placeholder="(xxx) xxx-xxxx" />
+                </Field>
               </div>
 
               <Field label="Address" chn="地址">
-                <input className={inp} value={form.address} onChange={e => setContact('address', e.target.value)} placeholder="Street address" />
+                <input className={inp} value={form.address}
+                  onChange={e => setContact('address', e.target.value)} placeholder="Street address" />
               </Field>
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-1">
-                  <Field label="City" chn="城市"><input className={inp} value={form.city} onChange={e => setContact('city', e.target.value)} placeholder="City" /></Field>
+                  <Field label="City" chn="城市">
+                    <input className={inp} value={form.city}
+                      onChange={e => setContact('city', e.target.value)} placeholder="City" />
+                  </Field>
                 </div>
-                <Field label="State" chn="州"><input className={inp} value={form.state} onChange={e => setContact('state', e.target.value.slice(0,2).toUpperCase())} placeholder="CA" maxLength={2} /></Field>
-                <Field label="Zip" chn="郵編"><input className={inp} value={form.zip} onChange={e => setContact('zip', e.target.value)} placeholder="00000" maxLength={10} /></Field>
+                <Field label="State" chn="州">
+                  <input className={inp} value={form.state}
+                    onChange={e => setContact('state', e.target.value.slice(0, 2).toUpperCase())}
+                    placeholder="CA" maxLength={2} />
+                </Field>
+                <Field label="Zip" chn="郵編">
+                  <input className={inp} value={form.zip}
+                    onChange={e => setContact('zip', e.target.value)} placeholder="00000" maxLength={10} />
+                </Field>
               </div>
 
               {cfg?.showChurch && (
                 <Field label="Church" chn="教會">
-                  <input className={inp} value={form.church} onChange={e => setContact('church', e.target.value)} placeholder="e.g. CNSCCC" />
+                  <input className={inp} value={form.church}
+                    onChange={e => setContact('church', e.target.value)} placeholder="e.g. CNSCCC" />
                 </Field>
               )}
 
-              {/* Custom fields that belong at the family level */}
               {customFieldDefs.filter(f => f.id.startsWith('family_')).map(field => (
                 <CustomField key={field.id} field={field}
                   value={form.customFieldValues[field.id] ?? ''}
@@ -221,61 +267,96 @@ export default function Register() {
           {step === 2 && (
             <>
               <p className="text-sm text-gray-500">
-                請為每位參加者填寫資料。<br />
-                Add each person attending the event.
+                請為每位參加者填寫資料。* 為必填。<br />
+                Add each person attending the event. * = required.
               </p>
 
               <div className="space-y-3">
                 {form.members.map((member, idx) => (
                   <div key={member.id} className="border rounded-xl p-4 bg-gray-50">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-xs font-semibold text-gray-500">成員 Member {idx + 1}</span>
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        成員 Member {idx + 1}
+                      </span>
                       {form.members.length > 1 && (
-                        <button onClick={() => removeMember(member.id)} className="text-red-400 hover:text-red-600">
+                        <button onClick={() => removeMember(member.id)}
+                          className="text-red-400 hover:text-red-600 transition-colors">
                           <Trash2 size={15} />
                         </button>
                       )}
                     </div>
 
+                    {/* Name */}
                     <div className="grid grid-cols-2 gap-2 mb-2">
-                      <input className={`${inp} bg-white`} value={member.firstName} onChange={e => setMember(member.id, 'firstName', e.target.value)} placeholder="First Name *" />
-                      <input className={`${inp} bg-white`} value={member.lastName} onChange={e => setMember(member.id, 'lastName', e.target.value)} placeholder="Last Name *" />
+                      <input className={`${inp} bg-white`} value={member.firstName}
+                        onChange={e => setMember(member.id, 'firstName', e.target.value)}
+                        placeholder="First Name *" />
+                      <input className={`${inp} bg-white`} value={member.lastName}
+                        onChange={e => setMember(member.id, 'lastName', e.target.value)}
+                        placeholder="Last Name *" />
                     </div>
 
-                    <input className={`${inp} bg-white mb-2`} value={member.chineseName} onChange={e => setMember(member.id, 'chineseName', e.target.value)} placeholder="中文名 Chinese Name（選填）" />
+                    <input className={`${inp} bg-white mb-3`} value={member.chineseName}
+                      onChange={e => setMember(member.id, 'chineseName', e.target.value)}
+                      placeholder="中文名 Chinese Name（選填）" />
 
-                    {/* Age category — shown based on config */}
-                    {cfg?.showAgeCategory && (
-                      <div className="flex flex-wrap gap-1.5 mb-2">
-                        {AGE_CATEGORIES.map(cat => (
-                          <button key={cat.value} type="button"
-                            onClick={() => setMember(member.id, 'ageCategory', cat.value)}
-                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                              member.ageCategory === cat.value ? cat.color + ' shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                    {/* Gender — always shown */}
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-500 mb-1.5">性別 Gender *</p>
+                      <div className="flex gap-2">
+                        {GENDERS.map(g => (
+                          <button key={g.value} type="button"
+                            onClick={() => setMember(member.id, 'gender', g.value)}
+                            className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                              member.gender === g.value
+                                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
                             }`}>
-                            {cat.eng} {cat.chn}
+                            {g.chn} {g.eng}
                           </button>
                         ))}
                       </div>
+                    </div>
+
+                    {/* Age category */}
+                    {cfg?.showAgeCategory && (
+                      <div className="mb-3">
+                        <p className="text-xs text-gray-500 mb-1.5">年齡 Age Category</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {AGE_CATEGORIES.map(cat => (
+                            <button key={cat.value} type="button"
+                              onClick={() => setMember(member.id, 'ageCategory', cat.value)}
+                              className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                                member.ageCategory === cat.value
+                                  ? cat.color + ' shadow-sm'
+                                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                              }`}>
+                              {cat.eng} {cat.chn}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     )}
 
-                    {/* Shirt size — shown based on config */}
+                    {/* Shirt size */}
                     {cfg?.showShirtSize && (
-                      <div className="mb-2">
-                        <label className="block text-xs text-gray-500 mb-1">T-Shirt Size 尺碼</label>
+                      <div className="mb-3">
+                        <p className="text-xs text-gray-500 mb-1.5">T-Shirt Size 尺碼</p>
                         <div className="flex flex-wrap gap-1">
                           {SHIRT_SIZES.map(s => (
                             <button key={s} type="button"
                               onClick={() => setMember(member.id, 'shirtSize', s)}
                               className={`px-2 py-0.5 rounded text-xs border transition-all ${
-                                member.shirtSize === s ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                                member.shirtSize === s
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
                               }`}>{s}</button>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {/* Dietary notes — shown based on config */}
+                    {/* Dietary notes */}
                     {cfg?.showDietary && (
                       <textarea className={`${inp} bg-white`} rows={2}
                         value={member.dietaryNotes}
@@ -291,6 +372,13 @@ export default function Register() {
                           onChange={(id, val) => setCustomField(`${member.id}_${id}`, val)} />
                       </div>
                     ))}
+
+                    {/* Validation hint */}
+                    {(!member.firstName.trim() || !member.lastName.trim() || !member.gender) && (
+                      <p className="text-xs text-amber-600 mt-2">
+                        ⚠ Please fill in name and gender.
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -317,22 +405,34 @@ export default function Register() {
                 </p>
                 {form.email   && <p className="text-sm text-gray-600">{form.email}</p>}
                 {form.phone   && <p className="text-sm text-gray-600">{form.phone}</p>}
-                {form.address && <p className="text-sm text-gray-600">{form.address}{form.city && `, ${form.city}`}{form.state && `, ${form.state}`}{form.zip && ` ${form.zip}`}</p>}
+                {form.address && (
+                  <p className="text-sm text-gray-600">
+                    {form.address}{form.city && `, ${form.city}`}{form.state && `, ${form.state}`}{form.zip && ` ${form.zip}`}
+                  </p>
+                )}
                 {form.church  && <p className="text-sm text-gray-600">⛪ {form.church}</p>}
               </div>
 
               <div className="bg-gray-50 rounded-xl p-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">成員 Members ({form.members.length})</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  成員 Members ({form.members.length})
+                </p>
                 <div className="space-y-2">
                   {form.members.map(m => {
                     const cat = AGE_CATEGORIES.find(c => c.value === m.ageCategory)
+                    const gen = GENDERS.find(g => g.value === m.gender)
                     return (
                       <div key={m.id} className="flex items-center justify-between">
                         <span className="text-sm text-gray-800">
                           {m.firstName} {m.lastName}
                           {m.chineseName && <span className="ml-2 text-gray-400 text-xs">{m.chineseName}</span>}
                         </span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                          {gen && (
+                            <span className="text-xs px-2 py-0.5 rounded-full border bg-gray-100 text-gray-600 border-gray-200">
+                              {gen.chn}
+                            </span>
+                          )}
                           {m.shirtSize && <span className="text-xs text-gray-400">{m.shirtSize}</span>}
                           {cat && cfg?.showAgeCategory && (
                             <span className={`text-xs px-2 py-0.5 rounded-full border ${cat.color}`}>{cat.eng}</span>
@@ -345,7 +445,9 @@ export default function Register() {
               </div>
 
               {submitError && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">{submitError}</div>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
+                  {submitError}
+                </div>
               )}
             </>
           )}
@@ -353,7 +455,8 @@ export default function Register() {
           {/* Navigation */}
           <div className="flex justify-between pt-2">
             {step > 1
-              ? <button onClick={() => setStep(s => s - 1)} className="flex items-center gap-1 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium">
+              ? <button onClick={() => setStep(s => s - 1)}
+                  className="flex items-center gap-1 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium">
                   <ChevronLeft size={16} /> 上一步 Back
                 </button>
               : <div />}
