@@ -1,5 +1,6 @@
 #!/bin/bash
-# post-commit: bump version in package.json based on conventional commit type.
+# post-commit: bump version in package.json based on conventional commit type,
+# then amend the commit and tag it.
 #
 # Bump rules (Conventional Commits):
 #   feat!: / BREAKING CHANGE  → major  (x.0.0)
@@ -54,3 +55,7 @@ touch "$SENTINEL"
 
 git add "$PKG"
 git commit --amend --no-edit
+
+# Tag the amended commit so git describe returns a clean version string.
+git tag -f "v$NEW"
+echo "post-commit: tagged v$NEW"
