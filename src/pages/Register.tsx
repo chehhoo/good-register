@@ -587,8 +587,8 @@ export default function Register() {
                 </button>}
           </div>
         </div>
+        <p className="text-center text-gray-400 text-[10px] pb-3">v{__APP_VERSION__}</p>
       </div>
-      <p className="text-center text-gray-300 text-[10px] mt-3 pb-4">v{__APP_VERSION__}</p>
     </div>
   )
 }
