@@ -1,17 +1,27 @@
 #!/bin/bash
 # post-commit: bump version in package.json based on conventional commit type,
-# then amend the commit and tag it.
+# amend the commit, then tag it with the new version.
 #
 # Bump rules (Conventional Commits):
 #   feat!: / BREAKING CHANGE  → major  (x.0.0)
 #   feat:                     → minor  (0.x.0)
 #   everything else           → patch  (0.0.x)
 
-SENTINEL=".git/BUMP_IN_PROGRESS"
+TAG_SENTINEL=".git/TAG_AFTER_AMEND"
+BUMP_SENTINEL=".git/BUMP_IN_PROGRESS"
 
-# Guard against recursion: the --amend below triggers post-commit again.
-if [ -f "$SENTINEL" ]; then
-    rm -f "$SENTINEL"
+# Second invocation (after --amend): apply the tag then exit.
+if [ -f "$TAG_SENTINEL" ]; then
+    NEW=$(cat "$TAG_SENTINEL")
+    rm -f "$TAG_SENTINEL"
+    git tag -f "v$NEW"
+    echo "post-commit: tagged v$NEW"
+    exit 0
+fi
+
+# Guard against any other recursion.
+if [ -f "$BUMP_SENTINEL" ]; then
+    rm -f "$BUMP_SENTINEL"
     exit 0
 fi
 
@@ -50,12 +60,9 @@ echo "post-commit: $BUMP bump  $CURRENT → $NEW"
 # Update package.json
 sed -i "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW\"/" "$PKG"
 
-# Create sentinel before amending so the re-triggered hook exits cleanly.
-touch "$SENTINEL"
+# Write new version to TAG_SENTINEL so the next invocation can tag it.
+echo "$NEW" > "$TAG_SENTINEL"
+touch "$BUMP_SENTINEL"
 
 git add "$PKG"
 git commit --amend --no-edit
-
-# Tag the amended commit so git describe returns a clean version string.
-git tag -f "v$NEW"
-echo "post-commit: tagged v$NEW"
