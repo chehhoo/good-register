@@ -192,6 +192,13 @@ export default function Register() {
           <p className="text-sm text-gray-400 mt-1">
             您的報名已收到，工作人員將與您跟進確認。
           </p>
+
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-6 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+          >
+            ＋ 為另一個家庭報名 Register another family
+          </button>
         </div>
       </div>
     )
