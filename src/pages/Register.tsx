@@ -588,6 +588,9 @@ export default function Register() {
           </div>
         </div>
       </div>
+      <p className="text-center text-gray-300 text-[10px] mt-3 pb-4">v{__APP_VERSION__}</p>
     </div>
   )
 }
+
+declare const __APP_VERSION__: string
