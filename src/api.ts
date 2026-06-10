@@ -28,6 +28,7 @@ export async function submitRegistration(form: FormData) {
     contactLastName:    form.contactLastName.trim(),
     contactChineseName: form.contactChineseName.trim() || null,
     email:   form.email.trim()   || null,
+    mobilePhone: form.mobilePhone.trim() || null,
     phone:   form.phone.trim()   || null,
     address: form.address.trim() || null,
     city:    form.city.trim()    || null,
@@ -41,6 +42,8 @@ export async function submitRegistration(form: FormData) {
       gender:       m.gender || null,
       ageCategory:  m.ageCategory,
       shirtSize:    m.shirtSize || null,
+      email:        m.email.trim() || null,
+      mobilePhone:  m.mobilePhone.trim() || null,
       dietaryNotes: m.dietaryNotes.trim() || null,
     })),
     customFieldValues: Object.keys(form.customFieldValues).length > 0

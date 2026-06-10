@@ -19,7 +19,6 @@ const AGE_CATEGORIES: { value: AgeCategory; eng: string; chn: string; color: str
 const GENDERS: { value: Gender; eng: string; chn: string }[] = [
   { value: 'M', eng: 'Male',   chn: '男' },
   { value: 'F', eng: 'Female', chn: '女' },
-  { value: 'O', eng: 'Other',  chn: '其他' },
 ]
 
 const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
@@ -32,12 +31,14 @@ const newMember = (opts: Partial<Member> & { lastName?: string } = {}): Member =
   gender: opts.gender ?? '',
   ageCategory: opts.ageCategory ?? 'ADULT',
   shirtSize: opts.shirtSize ?? '',
+  email: opts.email ?? '',
+  mobilePhone: opts.mobilePhone ?? '',
   dietaryNotes: opts.dietaryNotes ?? '',
 })
 
 const emptyForm = (): FormData => ({
   contactFirstName: '', contactLastName: '', contactChineseName: '',
-  email: '', phone: '', address: '', city: '', state: '', zip: '',
+  email: '', mobilePhone: '', phone: '', address: '', city: '', state: '', zip: '',
   church: '', members: [newMember()], customFieldValues: {},
 })
 
@@ -143,9 +144,13 @@ export default function Register() {
   const setCustomField = (id: string, value: string) =>
     setForm(f => ({ ...f, customFieldValues: { ...f.customFieldValues, [id]: value } }))
 
-  const step1Valid = !!form.contactFirstName.trim() && !!form.contactLastName.trim() && !!form.church.trim()
+  // Mobile is optional, but a partially-typed number blocks Next
+  const mobileDigits = form.mobilePhone.replace(/\D/g, '')
+  const mobileValid = mobileDigits.length === 0 || mobileDigits.length === 10
+  const step1Valid = !!form.contactFirstName.trim() && !!form.contactLastName.trim()
+    && mobileValid && !!form.church.trim()
   const step2Valid = form.members.length > 0 &&
-    form.members.every(m => m.firstName.trim() && m.lastName.trim() && m.ageCategory && m.gender)
+    form.members.every(m => m.firstName.trim() && m.lastName.trim() && m.ageCategory)
 
   const handleSubmit = async () => {
     setSubmitting(true)
@@ -257,16 +262,22 @@ export default function Register() {
               </Field>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Email" chn="電郵">
-                  <input type="email" className={inp} value={form.email}
-                    onChange={e => setContact('email', e.target.value)} placeholder="email@example.com" />
+                <Field label="Mobile Phone" chn="手機">
+                  <input type="tel" className={inp} value={form.mobilePhone}
+                    onChange={e => setContact('mobilePhone', formatPhone(e.target.value))}
+                    placeholder="(xxx) xxx-xxxx" />
                 </Field>
-                <Field label="Phone" chn="電話">
+                <Field label="Home Phone" chn="住家電話">
                   <input type="tel" className={inp} value={form.phone}
                     onChange={e => setContact('phone', formatPhone(e.target.value))}
                     placeholder="(xxx) xxx-xxxx" />
                 </Field>
               </div>
+
+              <Field label="Email" chn="電郵">
+                <input type="email" className={inp} value={form.email}
+                  onChange={e => setContact('email', e.target.value)} placeholder="email@example.com" />
+              </Field>
 
               <Field label="Address" chn="地址">
                 <input className={inp} value={form.address}
@@ -399,11 +410,11 @@ export default function Register() {
 
                     {/* Gender — always shown */}
                     <div className="mb-3">
-                      <p className="text-xs text-gray-500 mb-1.5">性別 Gender *</p>
+                      <p className="text-xs text-gray-500 mb-1.5">性別 Gender</p>
                       <div className="flex gap-2">
                         {GENDERS.map(g => (
                           <button key={g.value} type="button"
-                            onClick={() => setMember(member.id, 'gender', g.value)}
+                            onClick={() => setMember(member.id, 'gender', member.gender === g.value ? '' : g.value)}
                             className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                               member.gender === g.value
                                 ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
@@ -432,6 +443,18 @@ export default function Register() {
                             </button>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Email + mobile — adults only, optional (member 1 is prefilled from the contact page) */}
+                    {member.ageCategory === 'ADULT' && (
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <input type="email" className={`${inp} bg-white`} value={member.email}
+                          onChange={e => setMember(member.id, 'email', e.target.value)}
+                          placeholder="電郵 Email（選填）" />
+                        <input type="tel" className={`${inp} bg-white`} value={member.mobilePhone}
+                          onChange={e => setMember(member.id, 'mobilePhone', formatPhone(e.target.value))}
+                          placeholder="手機 Mobile（選填）" />
                       </div>
                     )}
 
@@ -471,9 +494,9 @@ export default function Register() {
                     ))}
 
                     {/* Validation hint */}
-                    {(!member.firstName.trim() || !member.lastName.trim() || !member.gender) && (
+                    {(!member.firstName.trim() || !member.lastName.trim()) && (
                       <p className="text-xs text-amber-600 mt-2">
-                        ⚠ Please fill in name and gender.
+                        ⚠ Please fill in first and last name.
                       </p>
                     )}
                   </div>
@@ -500,8 +523,9 @@ export default function Register() {
                   {form.contactFirstName} {form.contactLastName}
                   {form.contactChineseName && <span className="ml-2 text-gray-500">{form.contactChineseName}</span>}
                 </p>
-                {form.email   && <p className="text-sm text-gray-600">{form.email}</p>}
-                {form.phone   && <p className="text-sm text-gray-600">{form.phone}</p>}
+                {form.email       && <p className="text-sm text-gray-600">{form.email}</p>}
+                {form.mobilePhone && <p className="text-sm text-gray-600">📱 {form.mobilePhone}</p>}
+                {form.phone       && <p className="text-sm text-gray-600">☎ {form.phone}</p>}
                 {form.address && (
                   <p className="text-sm text-gray-600">
                     {form.address}{form.city && `, ${form.city}`}{form.state && `, ${form.state}`}{form.zip && ` ${form.zip}`}
@@ -561,15 +585,25 @@ export default function Register() {
             {step < 3
               ? <button onClick={() => {
                   if (step === 1) {
-                    // Pre-populate member 1 with the contact person if still blank
+                    // Pre-populate member 1 with the contact person's details.
+                    // Name/Chinese name only when still blank; email and mobile
+                    // whenever member 1 hasn't entered their own.
                     setForm(f => {
                       const m0 = f.members[0]
-                      const shouldPrefill = !m0.firstName.trim() && !m0.lastName.trim()
-                      if (!shouldPrefill) return { ...f, step: 2 } as any
+                      const prefillName = !m0.firstName.trim() && !m0.lastName.trim()
                       return {
                         ...f,
                         members: [
-                          { ...m0, firstName: f.contactFirstName, lastName: f.contactLastName, chineseName: f.contactChineseName },
+                          {
+                            ...m0,
+                            ...(prefillName ? {
+                              firstName: f.contactFirstName,
+                              lastName: f.contactLastName,
+                              chineseName: f.contactChineseName,
+                            } : {}),
+                            email: m0.email.trim() ? m0.email : f.email,
+                            mobilePhone: m0.mobilePhone.trim() ? m0.mobilePhone : f.mobilePhone,
+                          },
                           ...f.members.slice(1),
                         ],
                       }

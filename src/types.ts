@@ -39,6 +39,8 @@ export interface Member {
   gender: Gender | ''
   ageCategory: AgeCategory
   shirtSize: string
+  email: string
+  mobilePhone: string
   dietaryNotes: string
 }
 
@@ -47,6 +49,7 @@ export interface FormData {
   contactLastName: string
   contactChineseName: string
   email: string
+  mobilePhone: string
   phone: string
   address: string
   city: string
