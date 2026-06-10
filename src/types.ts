@@ -38,6 +38,8 @@ export interface Member {
   chineseName: string
   gender: Gender | ''
   ageCategory: AgeCategory
+  /** Exact age for non-adult categories ('' = not selected) */
+  exactAge: string
   shirtSize: string
   email: string
   mobilePhone: string

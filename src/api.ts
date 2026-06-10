@@ -41,6 +41,7 @@ export async function submitRegistration(form: FormData) {
       chineseName:  m.chineseName.trim() || null,
       gender:       m.gender || null,
       ageCategory:  m.ageCategory,
+      exactAge:     m.exactAge !== '' ? Number(m.exactAge) : null,
       shirtSize:    m.shirtSize || null,
       email:        m.email.trim() || null,
       mobilePhone:  m.mobilePhone.trim() || null,

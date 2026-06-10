@@ -23,6 +23,14 @@ const GENDERS: { value: Gender; eng: string; chn: string }[] = [
 
 const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL']
 
+/** Exact-age choices per non-adult category */
+const AGE_RANGES: Partial<Record<AgeCategory, number[]>> = {
+  YOUTH: [13, 14, 15, 16, 17],
+  K5:    [6, 7, 8, 9, 10, 11, 12],
+  PREK:  [3, 4, 5],
+  BABY:  [0, 1, 2],
+}
+
 const newMember = (opts: Partial<Member> & { lastName?: string } = {}): Member => ({
   id: crypto.randomUUID(),
   firstName: opts.firstName ?? '',
@@ -30,6 +38,7 @@ const newMember = (opts: Partial<Member> & { lastName?: string } = {}): Member =
   chineseName: opts.chineseName ?? '',
   gender: opts.gender ?? '',
   ageCategory: opts.ageCategory ?? 'ADULT',
+  exactAge: opts.exactAge ?? '',
   shirtSize: opts.shirtSize ?? '',
   email: opts.email ?? '',
   mobilePhone: opts.mobilePhone ?? '',
@@ -150,7 +159,8 @@ export default function Register() {
   const step1Valid = !!form.contactFirstName.trim() && !!form.contactLastName.trim()
     && mobileValid && !!form.church.trim()
   const step2Valid = form.members.length > 0 &&
-    form.members.every(m => m.firstName.trim() && m.lastName.trim() && m.ageCategory)
+    form.members.every(m => m.firstName.trim() && m.lastName.trim() && m.ageCategory
+      && (m.ageCategory === 'ADULT' || m.exactAge !== ''))
 
   const handleSubmit = async () => {
     setSubmitting(true)
@@ -433,7 +443,10 @@ export default function Register() {
                         <div className="flex flex-wrap gap-1.5">
                           {AGE_CATEGORIES.map(cat => (
                             <button key={cat.value} type="button"
-                              onClick={() => setMember(member.id, 'ageCategory', cat.value)}
+                              onClick={() => {
+                                setMember(member.id, 'ageCategory', cat.value)
+                                setMember(member.id, 'exactAge', '')
+                              }}
                               className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
                                 member.ageCategory === cat.value
                                   ? cat.color + ' shadow-sm'
@@ -443,6 +456,26 @@ export default function Register() {
                             </button>
                           ))}
                         </div>
+
+                        {/* Exact age for non-adult categories */}
+                        {AGE_RANGES[member.ageCategory] && (
+                          <div className="mt-2">
+                            <p className="text-xs text-gray-500 mb-1.5">實際年齡 Exact Age *</p>
+                            <div className="flex flex-wrap gap-1">
+                              {AGE_RANGES[member.ageCategory]!.map(age => (
+                                <button key={age} type="button"
+                                  onClick={() => setMember(member.id, 'exactAge', String(age))}
+                                  className={`w-9 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                                    member.exactAge === String(age)
+                                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                      : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                                  }`}>
+                                  {age}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -556,7 +589,9 @@ export default function Register() {
                           )}
                           {m.shirtSize && <span className="text-xs text-gray-400">{m.shirtSize}</span>}
                           {cat && cfg?.showAgeCategory && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full border ${cat.color}`}>{cat.eng}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full border ${cat.color}`}>
+                              {cat.eng}{m.exactAge !== '' && ` · ${m.exactAge}歲`}
+                            </span>
                           )}
                         </div>
                       </div>
