@@ -141,11 +141,7 @@ export default function Register() {
     setForm(f => ({ ...f, members: f.members.map(m => m.id === id ? { ...m, [field]: value } : m) }))
 
   const addMember = () =>
-    setForm(f => ({ ...f, members: [...f.members, newMember({
-      firstName:    f.contactFirstName,
-      lastName:     f.contactLastName,
-      chineseName:  f.contactChineseName,
-    })] }))
+    setForm(f => ({ ...f, members: [...f.members, newMember()] }))
 
   const removeMember = (id: string) =>
     setForm(f => ({ ...f, members: f.members.filter(m => m.id !== id) }))
@@ -620,29 +616,20 @@ export default function Register() {
             {step < 3
               ? <button onClick={() => {
                   if (step === 1) {
-                    // Pre-populate member 1 with the contact person's details.
-                    // Name/Chinese name only when still blank; email and mobile
-                    // whenever member 1 hasn't entered their own.
-                    setForm(f => {
-                      const m0 = f.members[0]
-                      const prefillName = !m0.firstName.trim() && !m0.lastName.trim()
-                      return {
-                        ...f,
-                        members: [
-                          {
-                            ...m0,
-                            ...(prefillName ? {
-                              firstName: f.contactFirstName,
-                              lastName: f.contactLastName,
-                              chineseName: f.contactChineseName,
-                            } : {}),
-                            email: m0.email.trim() ? m0.email : f.email,
-                            mobilePhone: m0.mobilePhone.trim() ? m0.mobilePhone : f.mobilePhone,
-                          },
-                          ...f.members.slice(1),
-                        ],
-                      }
-                    })
+                    setForm(f => ({
+                      ...f,
+                      members: [
+                        {
+                          ...f.members[0],
+                          firstName: f.contactFirstName,
+                          lastName: f.contactLastName,
+                          chineseName: f.contactChineseName,
+                          email: f.email,
+                          mobilePhone: f.mobilePhone,
+                        },
+                        ...f.members.slice(1),
+                      ],
+                    }))
                   }
                   setStep(s => s + 1)
                 }}
