@@ -1,13 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { readFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 
 function pkgVersion(): string {
   try {
-    const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
-    return pkg.version ?? 'dev'
+    return execSync('git describe --tags --abbrev=0', { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString().trim().replace(/^v/, '') || 'dev'
   } catch {
     return 'dev'
   }
