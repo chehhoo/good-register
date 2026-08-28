@@ -35,6 +35,9 @@ export async function submitRegistration(form: FormData) {
     state:   form.state.trim()   || null,
     zip:     form.zip.trim()     || null,
     church:  form.church.trim()  || null,
+    // Sent even when false: an explicit refusal is itself the consent record
+    // carriers expect. Ignored by the API until the backend persists it.
+    smsConsent: form.smsConsent,
     members: form.members.map(m => ({
       firstName:    m.firstName.trim(),
       lastName:     m.lastName.trim(),

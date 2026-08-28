@@ -49,6 +49,7 @@ const emptyForm = (): FormData => ({
   contactFirstName: '', contactLastName: '', contactChineseName: '',
   email: '', mobilePhone: '', phone: '', address: '', city: '', state: '', zip: '',
   church: '', members: [newMember()], customFieldValues: {},
+  smsConsent: false,
 })
 
 // ── Input helpers ─────────────────────────────────────────────────────────────
@@ -279,6 +280,30 @@ export default function Register() {
                     placeholder="(xxx) xxx-xxxx" />
                 </Field>
               </div>
+
+              {/* SMS opt-in — deliberately its own unchecked checkbox, never bundled
+                  into another agreement, and never pre-checked. Mobile Phone stays
+                  optional above: consent must not be a condition of registering.
+                  The four disclosures below (brand, frequency, data rates, STOP/HELP)
+                  are what carriers check for. */}
+              <label className="flex items-start gap-2 text-xs text-gray-600 leading-relaxed cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 shrink-0"
+                  checked={form.smsConsent}
+                  onChange={e => setForm(f => ({ ...f, smsConsent: e.target.checked }))}
+                />
+                <span>
+                  勾選即表示您同意接收來自 <strong>Good Vessel</strong> 的一次性密碼及驗證碼簡訊。
+                  訊息頻率不定，可能產生訊息及數據費用。回覆 HELP 取得協助，回覆 STOP 取消接收。
+                  <span className="block mt-1">
+                    By checking, you consent to receive one-time passcodes and verification
+                    codes from <strong>Good Vessel</strong>. Message frequency may vary.
+                    Message and data rates may apply. Reply HELP for help or STOP to opt-out.
+                    Consent is optional and is not required to register.
+                  </span>
+                </span>
+              </label>
 
               <Field label="Email" chn="電郵">
                 <input type="email" className={inp} value={form.email}
