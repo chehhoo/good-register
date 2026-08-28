@@ -63,4 +63,7 @@ export interface FormData {
   /** Explicit, separate SMS opt-in. Carriers require consent to be its own
    *  unchecked action, never bundled into another agreement. */
   smsConsent: boolean
+  /** Acceptance of Terms of Service and Privacy Policy. Kept separate from
+   *  smsConsent: bundling the two is independently disqualifying for carriers. */
+  termsAccepted: boolean
 }

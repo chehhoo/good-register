@@ -49,7 +49,7 @@ const emptyForm = (): FormData => ({
   contactFirstName: '', contactLastName: '', contactChineseName: '',
   email: '', mobilePhone: '', phone: '', address: '', city: '', state: '', zip: '',
   church: '', members: [newMember()], customFieldValues: {},
-  smsConsent: false,
+  smsConsent: false, termsAccepted: false,
 })
 
 // ── Input helpers ─────────────────────────────────────────────────────────────
@@ -154,7 +154,7 @@ export default function Register() {
   const mobileDigits = form.mobilePhone.replace(/\D/g, '')
   const mobileValid = mobileDigits.length === 0 || mobileDigits.length === 10
   const step1Valid = !!form.contactFirstName.trim() && !!form.contactLastName.trim()
-    && mobileValid && !!form.church.trim()
+    && mobileValid && !!form.church.trim() && form.termsAccepted
   const step2Valid = form.members.length > 0 &&
     form.members.every(m => m.firstName.trim() && m.lastName.trim() && m.ageCategory
       && (m.ageCategory === 'ADULT' || m.exactAge !== ''))
@@ -301,6 +301,33 @@ export default function Register() {
                     codes from <strong>Good Vessel</strong>. Message frequency may vary.
                     Message and data rates may apply. Reply HELP for help or STOP to opt-out.
                     Consent is optional and is not required to register.
+                  </span>
+                </span>
+              </label>
+
+              {/* Terms and Privacy — deliberately a second, separate checkbox.
+                  Folding SMS consent into this one is independently
+                  disqualifying under carrier rules, so the two never merge. */}
+              <label className="flex items-start gap-2 text-xs text-gray-600 leading-relaxed cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 shrink-0"
+                  checked={form.termsAccepted}
+                  onChange={e => setForm(f => ({ ...f, termsAccepted: e.target.checked }))}
+                />
+                <span>
+                  我已閱讀並同意{' '}
+                  <a href="https://goodvessel.org/terms" target="_blank" rel="noopener noreferrer"
+                     className="text-blue-600 underline">服務條款</a>{' '}及{' '}
+                  <a href="https://goodvessel.org/privacy" target="_blank" rel="noopener noreferrer"
+                     className="text-blue-600 underline">私隱政策</a>。
+                  <span className="block mt-1">
+                    I have read and accept the{' '}
+                    <a href="https://goodvessel.org/terms" target="_blank" rel="noopener noreferrer"
+                       className="text-blue-600 underline">Terms of Service</a>{' '}and{' '}
+                    <a href="https://goodvessel.org/privacy" target="_blank" rel="noopener noreferrer"
+                       className="text-blue-600 underline">Privacy Policy</a>.
+                    <span className="text-red-500"> *</span>
                   </span>
                 </span>
               </label>

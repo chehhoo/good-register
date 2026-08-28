@@ -38,6 +38,9 @@ export async function submitRegistration(form: FormData) {
     // Sent even when false: an explicit refusal is itself the consent record
     // carriers expect. Ignored by the API until the backend persists it.
     smsConsent: form.smsConsent,
+    // Not yet persisted server-side — no column exists. Sent so acceptance
+    // is recorded the moment one is added.
+    termsAccepted: form.termsAccepted,
     members: form.members.map(m => ({
       firstName:    m.firstName.trim(),
       lastName:     m.lastName.trim(),
