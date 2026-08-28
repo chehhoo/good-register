@@ -60,4 +60,7 @@ export interface FormData {
   church: string
   members: Member[]
   customFieldValues: Record<string, string>
+  /** Explicit, separate SMS opt-in. Carriers require consent to be its own
+   *  unchecked action, never bundled into another agreement. */
+  smsConsent: boolean
 }
