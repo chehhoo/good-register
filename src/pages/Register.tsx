@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { PlusCircle, Trash2, ChevronRight, ChevronLeft, CheckCircle } from 'lucide-react'
+import { PlusCircle, Trash2, ChevronRight, ChevronLeft, CheckCircle, Mail, Smartphone } from 'lucide-react'
 import { fetchEventInfo, fetchChurches, submitRegistration } from '../api'
 import type { ChurchOption } from '../api'
 import CustomField from '../components/CustomField'
@@ -67,6 +67,16 @@ const deskMode = (() => {
 const DESK_RESET_SECONDS = 90
 const noAutofill = deskMode ? { autoComplete: 'off' } : {}
 
+/** Attendee app — families sign in there with the email they registered with. */
+const CONFERENCE_HOST = 'conference.goodvessel.org'
+const CONFERENCE_URL = `https://${CONFERENCE_HOST}`
+
+/** "a***@example.com" — enough to recognise, not enough to read off a shared desk tablet. */
+const maskEmail = (email: string) => {
+  const at = email.indexOf('@')
+  return at <= 1 ? email : email[0] + '***' + email.slice(at)
+}
+
 const emptyForm = (): FormData => ({
   contactFirstName: '', contactLastName: '', contactChineseName: '',
   email: '', mobilePhone: '', phone: '', address: '', city: '', state: '', zip: '',
@@ -111,6 +121,8 @@ export default function Register() {
   const [submitError, setSubmitError] = useState('')
   const [result, setResult] = useState<{
     familyName: string; memberNames: string[]; eventName: string; members: RegisteredMember[]
+    /** Where the confirmation email (with the QR codes) goes; null when no email was given. */
+    emailedTo: string | null
   } | null>(null)
   // Desk mode: seconds until the success screen resets itself for the next family
   const [secondsLeft, setSecondsLeft] = useState(DESK_RESET_SECONDS)
@@ -223,7 +235,7 @@ export default function Register() {
     try {
       const res = await submitRegistration(form, offeredMeals.length > 0 ? offeredMealIds : null, customFieldDefs)
       setResult({ familyName: res.familyName, memberNames: res.memberNames, eventName: res.eventName,
-                  members: res.members ?? [] })
+                  members: res.members ?? [], emailedTo: form.email.trim() || null })
       setSecondsLeft(DESK_RESET_SECONDS)
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: string } } }
@@ -247,6 +259,15 @@ export default function Register() {
             <>
               <p className="text-sm font-medium text-gray-700">請截圖保存，報到及領餐時出示 QR 碼</p>
               <p className="text-sm text-gray-500 mb-4">Take a screenshot — show the QR code at check-in and meals</p>
+              {result.emailedTo && (
+                <p data-testid="emailed-to" className="text-sm text-gray-600 bg-blue-50 rounded-xl px-3 py-2 mb-4 flex items-start justify-center gap-2">
+                  <Mail size={16} className="text-blue-500 shrink-0 mt-0.5" />
+                  <span>
+                    確認信（含 QR 碼）將寄至 {maskEmail(result.emailedTo)}<br />
+                    A copy with the QR codes is being emailed to you
+                  </span>
+                </p>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
                 {result.members.map(m => (
                   <div key={m.personId} className="border border-gray-200 rounded-xl p-3 flex flex-col items-center">
@@ -272,6 +293,44 @@ export default function Register() {
               </ul>
             </div>
           )}
+
+          {/* Conference app — sign-in is by an emailed code, so a family without an email
+              can't use it until the desk adds one. On the shared desk tablet the address
+              is text only: a link would take the tablet away from the registration form. */}
+          <div data-testid="conference-app" className="border border-gray-200 rounded-xl p-4 mb-5 text-left">
+            <p className="text-sm font-semibold text-gray-800 flex items-center gap-2 mb-1">
+              <Smartphone size={16} className="text-blue-500 shrink-0" />
+              大會 App Conference app
+            </p>
+            {result.emailedTo ? (
+              <>
+                <p className="text-sm text-gray-600">
+                  請用報名時填寫的電子郵件登入 <span className="font-medium text-gray-800">{CONFERENCE_HOST}</span>，查看行程、餐點、QR 碼及大會資訊。
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Sign in at <span className="font-medium text-gray-700">{CONFERENCE_HOST}</span> with the email you registered with to see the schedule, your meals, QR codes and conference information.
+                </p>
+                {!deskMode && (
+                  <a href={CONFERENCE_URL} target="_blank" rel="noopener noreferrer"
+                    className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800">
+                    前往大會 App Open the conference app →
+                  </a>
+                )}
+                <p className="text-xs text-gray-400 mt-2">
+                  如無法登入，請洽報到處協助。If you can't sign in, ask at the registration desk for help.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600">
+                  大會 App（{CONFERENCE_HOST}）可查看行程、餐點及大會資訊，需以電子郵件接收登入碼。如需使用，請洽報到處協助。
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  The conference app ({CONFERENCE_HOST}) shows the schedule, meals and conference information; the login code is sent by email. To use it, ask at the registration desk for help.
+                </p>
+              </>
+            )}
+          </div>
 
           <p className="text-sm text-gray-400">
             您的報名已收到，工作人員將與您跟進確認。<br />
@@ -420,6 +479,12 @@ export default function Register() {
               <Field label="Email" chn="電郵">
                 <input {...noAutofill} type="email" className={inp} value={form.email}
                   onChange={e => setContact('email', e.target.value)} placeholder="email@example.com" />
+                {/* Sign-in to the conference app is by a code sent to this email (SMS sign-in is
+                    not available yet), so without it the family can't use the app. */}
+                <p data-testid="email-hint" className="text-xs text-gray-500 mt-1">
+                  請填寫您本人的電子郵件，用來接收確認信及大會 App 的登入碼。<br />
+                  Use your own email — we send your confirmation and the conference app login code here.
+                </p>
               </Field>
 
               {!deskMode && (<>
