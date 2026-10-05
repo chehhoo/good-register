@@ -32,6 +32,13 @@ export interface MealOption {
   date: string | null   // YYYY-MM-DD
 }
 
+/** One registered member as returned by POST /register — scanCode is what their badge QR carries. */
+export interface RegisteredMember {
+  name: string
+  personId: number
+  scanCode: string
+}
+
 export interface EventInfo {
   id: number
   name: string

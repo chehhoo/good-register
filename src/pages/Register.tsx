@@ -4,8 +4,9 @@ import { fetchEventInfo, fetchChurches, submitRegistration } from '../api'
 import type { ChurchOption } from '../api'
 import CustomField from '../components/CustomField'
 import MealPicker from '../components/MealPicker'
+import QRCode from 'react-qr-code'
 import StepIndicator from '../components/StepIndicator'
-import type { AgeCategory, CustomFieldDef, EventInfo, FormData, Gender, Member } from '../types'
+import type { AgeCategory, CustomFieldDef, EventInfo, FormData, Gender, Member, RegisteredMember } from '../types'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,25 @@ const newMember = (opts: Partial<Member> & { lastName?: string } = {}): Member =
   dietaryNotes: opts.dietaryNotes ?? '',
   mealIds: null,
 })
+
+/**
+ * Desk mode — a shared tablet at the event-day registration desk. Turn on with
+ * ?desk=1 (off with ?desk=0); remembered for the browser tab. Hides optional
+ * fields, disables browser autofill so the next family can't see the previous
+ * family's details, and returns to a blank form shortly after each sign-up.
+ */
+const deskMode = (() => {
+  try {
+    const q = new URLSearchParams(window.location.search).get('desk')
+    if (q === '1') sessionStorage.setItem('deskMode', '1')
+    if (q === '0') sessionStorage.removeItem('deskMode')
+    return sessionStorage.getItem('deskMode') === '1'
+  } catch {
+    return false
+  }
+})()
+const DESK_RESET_SECONDS = 90
+const noAutofill = deskMode ? { autoComplete: 'off' } : {}
 
 const emptyForm = (): FormData => ({
   contactFirstName: '', contactLastName: '', contactChineseName: '',
@@ -90,8 +110,10 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [result, setResult] = useState<{
-    familyName: string; memberNames: string[]; eventName: string
+    familyName: string; memberNames: string[]; eventName: string; members: RegisteredMember[]
   } | null>(null)
+  // Desk mode: seconds until the success screen resets itself for the next family
+  const [secondsLeft, setSecondsLeft] = useState(DESK_RESET_SECONDS)
 
   // Church combobox state
   const [churches, setChurches] = useState<ChurchOption[]>([])
@@ -105,6 +127,28 @@ export default function Register() {
       .catch(() => setEventError('No active event found. Please contact the administrator.'))
     fetchChurches().then(setChurches).catch(() => {/* silently ignore */})
   }, [])
+
+  /** Blank form for the next family — and nothing of the previous one left on screen. */
+  const resetForNextFamily = () => {
+    setForm(emptyForm())
+    setStep(1)
+    setResult(null)
+    setSubmitError('')
+    setChurchSearch('')
+    window.scrollTo(0, 0)
+  }
+
+  // Desk mode: tick down on the success screen, then reset for the next family
+  useEffect(() => {
+    if (!deskMode || !result) return
+    let elapsed = 0
+    const t = setInterval(() => {
+      elapsed += 1
+      if (elapsed >= DESK_RESET_SECONDS) resetForNextFamily()
+      else setSecondsLeft(DESK_RESET_SECONDS - elapsed)
+    }, 1000)
+    return () => clearInterval(t)
+  }, [result])
 
   // Close church dropdown on outside click
   useEffect(() => {
@@ -178,7 +222,9 @@ export default function Register() {
     setSubmitError('')
     try {
       const res = await submitRegistration(form, offeredMeals.length > 0 ? offeredMealIds : null, customFieldDefs)
-      setResult({ familyName: res.familyName, memberNames: res.memberNames, eventName: res.eventName })
+      setResult({ familyName: res.familyName, memberNames: res.memberNames, eventName: res.eventName,
+                  members: res.members ?? [] })
+      setSecondsLeft(DESK_RESET_SECONDS)
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: string } } }
       setSubmitError(err.response?.data?.error ?? 'Submission failed. Please try again.')
@@ -192,39 +238,57 @@ export default function Register() {
   if (result) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-lg max-w-lg w-full p-8 text-center">
-          <CheckCircle className="mx-auto text-green-500 mb-4" size={56} />
+        <div className="bg-white rounded-2xl shadow-lg max-w-lg w-full p-6 sm:p-8 text-center">
+          <CheckCircle className="mx-auto text-green-500 mb-3" size={48} />
           <h1 className="text-2xl font-bold text-gray-800 mb-1">報名成功！Registration Complete!</h1>
-          <p className="text-gray-500 mb-6">{result.eventName}</p>
+          <p className="text-gray-500 mb-5">{result.eventName}</p>
 
-          <div className="bg-gray-50 rounded-xl p-4 text-left mb-6">
-            <p className="text-sm font-semibold text-gray-600 mb-2">
-              {result.familyName} — {result.memberNames.length} member{result.memberNames.length !== 1 ? 's' : ''}
-            </p>
-            <ul className="space-y-1">
-              {result.memberNames.map((name, i) => (
-                <li key={i} className="text-sm text-gray-700 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
-                  {name}
-                </li>
-              ))}
-            </ul>
-          </div>
+          {result.members.length > 0 ? (
+            <>
+              <p className="text-sm font-medium text-gray-700">請截圖保存，報到及領餐時出示 QR 碼</p>
+              <p className="text-sm text-gray-500 mb-4">Take a screenshot — show the QR code at check-in and meals</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+                {result.members.map(m => (
+                  <div key={m.personId} className="border border-gray-200 rounded-xl p-3 flex flex-col items-center">
+                    <QRCode value={m.scanCode} size={112} />
+                    <p className="text-sm font-medium text-gray-800 mt-2 leading-tight">{m.name}</p>
+                    <p className="text-[11px] text-gray-400 font-mono">#{m.scanCode}</p>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="bg-gray-50 rounded-xl p-4 text-left mb-6">
+              <p className="text-sm font-semibold text-gray-600 mb-2">
+                {result.familyName} — {result.memberNames.length} member{result.memberNames.length !== 1 ? 's' : ''}
+              </p>
+              <ul className="space-y-1">
+                {result.memberNames.map((name, i) => (
+                  <li key={i} className="text-sm text-gray-700 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
+                    {name}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-400">
+            您的報名已收到，工作人員將與您跟進確認。<br />
             Your registration has been received and is pending confirmation.
-            Staff will follow up with further details.
-          </p>
-          <p className="text-sm text-gray-400 mt-1">
-            您的報名已收到，工作人員將與您跟進確認。
           </p>
 
-          <button
-            onClick={() => window.location.reload()}
-            className="mt-6 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
-          >
-            ＋ 為另一個家庭報名 Register another family
-          </button>
+          {deskMode ? (
+            <button onClick={resetForNextFamily}
+              className="mt-6 w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors">
+              下一個家庭 Next family <span className="text-blue-200 text-sm">({secondsLeft}s)</span>
+            </button>
+          ) : (
+            <button onClick={resetForNextFamily}
+              className="mt-6 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors">
+              ＋ 為另一個家庭報名 Register another family
+            </button>
+          )}
         </div>
       </div>
     )
@@ -252,6 +316,11 @@ export default function Register() {
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-5 text-white rounded-t-2xl">
           <p className="text-blue-200 text-sm font-medium mb-1">{eventInfo?.name ?? '…'}</p>
           <h1 className="text-xl font-bold">活動報名 Event Registration</h1>
+          {deskMode && (
+            <span className="inline-block mt-2 text-[11px] font-medium bg-white/20 rounded-full px-2 py-0.5">
+              櫃台報名 Registration desk
+            </span>
+          )}
         </div>
 
         <StepIndicator step={step} />
@@ -268,31 +337,33 @@ export default function Register() {
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="First Name" chn="名字" required>
-                  <input className={inp} value={form.contactFirstName}
+                  <input {...noAutofill} className={inp} value={form.contactFirstName}
                     onChange={e => setContact('contactFirstName', e.target.value)} placeholder="First" />
                 </Field>
                 <Field label="Last Name" chn="姓氏" required>
-                  <input className={inp} value={form.contactLastName}
+                  <input {...noAutofill} className={inp} value={form.contactLastName}
                     onChange={e => setContact('contactLastName', e.target.value)} placeholder="Last" />
                 </Field>
               </div>
 
               <Field label="Chinese Name" chn="中文名">
-                <input className={inp} value={form.contactChineseName}
+                <input {...noAutofill} className={inp} value={form.contactChineseName}
                   onChange={e => setContact('contactChineseName', e.target.value)} placeholder="中文姓名（選填）" />
               </Field>
 
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Mobile Phone" chn="手機">
-                  <input type="tel" className={inp} value={form.mobilePhone}
+                  <input {...noAutofill} type="tel" className={inp} value={form.mobilePhone}
                     onChange={e => setContact('mobilePhone', formatPhone(e.target.value))}
                     placeholder="(xxx) xxx-xxxx" />
                 </Field>
-                <Field label="Home Phone" chn="住家電話">
-                  <input type="tel" className={inp} value={form.phone}
-                    onChange={e => setContact('phone', formatPhone(e.target.value))}
-                    placeholder="(xxx) xxx-xxxx" />
-                </Field>
+                {!deskMode && (
+                  <Field label="Home Phone" chn="住家電話">
+                    <input {...noAutofill} type="tel" className={inp} value={form.phone}
+                      onChange={e => setContact('phone', formatPhone(e.target.value))}
+                      placeholder="(xxx) xxx-xxxx" />
+                  </Field>
+                )}
               </div>
 
               {/* SMS opt-in — deliberately its own unchecked checkbox, never bundled
@@ -347,32 +418,34 @@ export default function Register() {
               </label>
 
               <Field label="Email" chn="電郵">
-                <input type="email" className={inp} value={form.email}
+                <input {...noAutofill} type="email" className={inp} value={form.email}
                   onChange={e => setContact('email', e.target.value)} placeholder="email@example.com" />
               </Field>
 
+              {!deskMode && (<>
               <Field label="Address" chn="地址">
-                <input className={inp} value={form.address}
+                <input {...noAutofill} className={inp} value={form.address}
                   onChange={e => setContact('address', e.target.value)} placeholder="Street address" />
               </Field>
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-1">
                   <Field label="City" chn="城市">
-                    <input className={inp} value={form.city}
+                    <input {...noAutofill} className={inp} value={form.city}
                       onChange={e => setContact('city', e.target.value)} placeholder="City" />
                   </Field>
                 </div>
                 <Field label="State" chn="州">
-                  <input className={inp} value={form.state}
+                  <input {...noAutofill} className={inp} value={form.state}
                     onChange={e => setContact('state', e.target.value.slice(0, 2).toUpperCase())}
                     placeholder="CA" maxLength={2} />
                 </Field>
                 <Field label="Zip" chn="郵編">
-                  <input className={inp} value={form.zip}
+                  <input {...noAutofill} className={inp} value={form.zip}
                     onChange={e => setContact('zip', e.target.value)} placeholder="00000" maxLength={10} />
                 </Field>
               </div>
+              </>)}
 
               {cfg?.showChurch && (
                 <Field label="Church" chn="教會" required>
@@ -468,15 +541,15 @@ export default function Register() {
 
                     {/* Name */}
                     <div className="grid grid-cols-2 gap-2 mb-2">
-                      <input className={`${inp} bg-white`} value={member.firstName}
+                      <input {...noAutofill} className={`${inp} bg-white`} value={member.firstName}
                         onChange={e => setMember(member.id, 'firstName', e.target.value)}
                         placeholder="First Name *" />
-                      <input className={`${inp} bg-white`} value={member.lastName}
+                      <input {...noAutofill} className={`${inp} bg-white`} value={member.lastName}
                         onChange={e => setMember(member.id, 'lastName', e.target.value)}
                         placeholder="Last Name *" />
                     </div>
 
-                    <input className={`${inp} bg-white mb-3`} value={member.chineseName}
+                    <input {...noAutofill} className={`${inp} bg-white mb-3`} value={member.chineseName}
                       onChange={e => setMember(member.id, 'chineseName', e.target.value)}
                       placeholder="中文名 Chinese Name（選填）" />
 
@@ -544,10 +617,10 @@ export default function Register() {
                     {/* Email + mobile — adults only, optional (member 1 is prefilled from the contact page) */}
                     {member.ageCategory === 'ADULT' && (
                       <div className="grid grid-cols-2 gap-2 mb-3">
-                        <input type="email" className={`${inp} bg-white`} value={member.email}
+                        <input {...noAutofill} type="email" className={`${inp} bg-white`} value={member.email}
                           onChange={e => setMember(member.id, 'email', e.target.value)}
                           placeholder="電郵 Email（選填）" />
-                        <input type="tel" className={`${inp} bg-white`} value={member.mobilePhone}
+                        <input {...noAutofill} type="tel" className={`${inp} bg-white`} value={member.mobilePhone}
                           onChange={e => setMember(member.id, 'mobilePhone', formatPhone(e.target.value))}
                           placeholder="手機 Mobile（選填）" />
                       </div>
