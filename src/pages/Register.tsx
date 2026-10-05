@@ -3,6 +3,7 @@ import { PlusCircle, Trash2, ChevronRight, ChevronLeft, CheckCircle } from 'luci
 import { fetchEventInfo, fetchChurches, submitRegistration } from '../api'
 import type { ChurchOption } from '../api'
 import CustomField from '../components/CustomField'
+import MealPicker from '../components/MealPicker'
 import StepIndicator from '../components/StepIndicator'
 import type { AgeCategory, CustomFieldDef, EventInfo, FormData, Gender, Member } from '../types'
 
@@ -43,6 +44,7 @@ const newMember = (opts: Partial<Member> & { lastName?: string } = {}): Member =
   email: opts.email ?? '',
   mobilePhone: opts.mobilePhone ?? '',
   dietaryNotes: opts.dietaryNotes ?? '',
+  mealIds: null,
 })
 
 const emptyForm = (): FormData => ({
@@ -132,6 +134,9 @@ export default function Register() {
     if (!cfg?.customFields) return []
     try { return JSON.parse(cfg.customFields) } catch { return [] }
   })()
+  const familyFields = customFieldDefs.filter(f => f.id.startsWith('family_'))
+  const memberFields = customFieldDefs.filter(f => !f.id.startsWith('family_'))
+  const answered = (key: string) => !!(form.customFieldValues[key] ?? '').trim()
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -147,6 +152,13 @@ export default function Register() {
   const removeMember = (id: string) =>
     setForm(f => ({ ...f, members: f.members.filter(m => m.id !== id) }))
 
+  // Meal step: only when the event shows it and has meals to offer
+  const offeredMeals = cfg.showMeals ? (eventInfo?.meals ?? []) : []
+  const offeredMealIds = offeredMeals.map(m => m.id)
+  const mealsOf = (m: Member) => m.mealIds ?? offeredMealIds
+  const setMemberMeals = (id: string, mealIds: number[]) =>
+    setForm(f => ({ ...f, members: f.members.map(m => m.id === id ? { ...m, mealIds } : m) }))
+
   const setCustomField = (id: string, value: string) =>
     setForm(f => ({ ...f, customFieldValues: { ...f.customFieldValues, [id]: value } }))
 
@@ -154,16 +166,18 @@ export default function Register() {
   const mobileDigits = form.mobilePhone.replace(/\D/g, '')
   const mobileValid = mobileDigits.length === 0 || mobileDigits.length === 10
   const step1Valid = !!form.contactFirstName.trim() && !!form.contactLastName.trim()
-    && mobileValid && !!form.church.trim() && form.termsAccepted
+    && mobileValid && (!cfg.showChurch || !!form.church.trim()) && form.termsAccepted
+    && familyFields.every(f => !f.required || answered(f.id))
   const step2Valid = form.members.length > 0 &&
     form.members.every(m => m.firstName.trim() && m.lastName.trim() && m.ageCategory
-      && (m.ageCategory === 'ADULT' || m.exactAge !== ''))
+      && (m.ageCategory === 'ADULT' || m.exactAge !== '')
+      && memberFields.every(f => !f.required || answered(`${m.id}_${f.id}`)))
 
   const handleSubmit = async () => {
     setSubmitting(true)
     setSubmitError('')
     try {
-      const res = await submitRegistration(form)
+      const res = await submitRegistration(form, offeredMeals.length > 0 ? offeredMealIds : null, customFieldDefs)
       setResult({ familyName: res.familyName, memberNames: res.memberNames, eventName: res.eventName })
     } catch (e: unknown) {
       const err = e as { response?: { data?: { error?: string } } }
@@ -539,6 +553,12 @@ export default function Register() {
                       </div>
                     )}
 
+                    {/* Meals */}
+                    {offeredMeals.length > 0 && (
+                      <MealPicker meals={offeredMeals} selected={mealsOf(member)}
+                        onChange={ids => setMemberMeals(member.id, ids)} />
+                    )}
+
                     {/* Shirt size */}
                     {cfg?.showShirtSize && (
                       <div className="mb-3">
@@ -636,6 +656,9 @@ export default function Register() {
                             </span>
                           )}
                           {m.shirtSize && <span className="text-xs text-gray-400">{m.shirtSize}</span>}
+                          {offeredMeals.length > 0 && (
+                            <span className="text-xs text-gray-500">🍱 {mealsOf(m).length}/{offeredMeals.length}</span>
+                          )}
                           {cat && cfg?.showAgeCategory && (
                             <span className={`text-xs px-2 py-0.5 rounded-full border ${cat.color}`}>
                               {cat.eng}{m.exactAge !== '' && ` · ${m.exactAge}歲`}

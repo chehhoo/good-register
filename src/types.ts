@@ -24,11 +24,20 @@ export interface RegistrationConfig {
   customFields: string | null  // raw JSON from backend
 }
 
+/** A meal the form can offer — present only when showMeals is on. */
+export interface MealOption {
+  id: number
+  day: number
+  type: string          // BREAKFAST | LUNCH | DINNER | SNACK | BANQUET
+  date: string | null   // YYYY-MM-DD
+}
+
 export interface EventInfo {
   id: number
   name: string
   type: string
   registrationConfig: RegistrationConfig
+  meals?: MealOption[]
 }
 
 export interface Member {
@@ -44,6 +53,8 @@ export interface Member {
   email: string
   mobilePhone: string
   dietaryNotes: string
+  /** Chosen meal ids; null = not yet touched, which means every offered meal */
+  mealIds: number[] | null
 }
 
 export interface FormData {

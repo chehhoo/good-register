@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { EventInfo, FormData } from './types'
+import type { CustomFieldDef, EventInfo, FormData } from './types'
 
 const BASE = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
@@ -22,7 +22,31 @@ export async function fetchChurches(): Promise<ChurchOption[]> {
   return res.data
 }
 
-export async function submitRegistration(form: FormData) {
+/**
+ * Custom answers keyed the way staff read them in the registration note —
+ * "Who invited you?" for family questions, "Mei Chen · Shirt colour" for
+ * per-member ones — instead of internal field ids. Blank answers are dropped.
+ */
+function readableAnswers(form: FormData, defs: CustomFieldDef[]): Record<string, string> | null {
+  const out: Record<string, string> = {}
+  for (const d of defs) {
+    const label = d.label?.trim() || d.labelChn?.trim() || d.id
+    if (d.id.startsWith('family_')) {
+      const v = (form.customFieldValues[d.id] ?? '').trim()
+      if (v) out[label] = v
+    } else {
+      for (const m of form.members) {
+        const v = (form.customFieldValues[`${m.id}_${d.id}`] ?? '').trim()
+        if (v) out[`${m.firstName.trim()} ${m.lastName.trim()} · ${label}`] = v
+      }
+    }
+  }
+  return Object.keys(out).length > 0 ? out : null
+}
+
+/** offeredMealIds: the event's meals when the meal step is shown, else null (no meals sent). */
+export async function submitRegistration(form: FormData, offeredMealIds: number[] | null,
+                                         customFieldDefs: CustomFieldDef[]) {
   const payload = {
     contactFirstName:   form.contactFirstName.trim(),
     contactLastName:    form.contactLastName.trim(),
@@ -52,9 +76,9 @@ export async function submitRegistration(form: FormData) {
       email:        m.email.trim() || null,
       mobilePhone:  m.mobilePhone.trim() || null,
       dietaryNotes: m.dietaryNotes.trim() || null,
+      mealIds:      offeredMealIds ? (m.mealIds ?? offeredMealIds) : null,
     })),
-    customFieldValues: Object.keys(form.customFieldValues).length > 0
-      ? form.customFieldValues : null,
+    customFieldValues: readableAnswers(form, customFieldDefs),
   }
   const res = await client.post('/register', payload)
   return res.data
